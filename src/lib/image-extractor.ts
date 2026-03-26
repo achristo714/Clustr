@@ -1,7 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Document } from "./types";
 
-const client = new Anthropic();
+function getClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY is not configured. Add it in Vercel Environment Variables.",
+    );
+  }
+  return new Anthropic({ apiKey });
+}
 
 type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
@@ -22,6 +30,7 @@ export async function extractImageText(file: {
   type: string;
 }): Promise<Document> {
   const base64 = Buffer.from(file.buffer).toString("base64");
+  const client = getClient();
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",

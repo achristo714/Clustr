@@ -1,7 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Document, AnalysisResult } from "./types";
 
-const client = new Anthropic();
+function getClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY is not configured. Add it in Vercel Environment Variables.",
+    );
+  }
+  return new Anthropic({ apiKey });
+}
 
 export async function analyzeDocuments(
   documents: Document[],
@@ -13,6 +21,7 @@ export async function analyzeDocuments(
     )
     .join("\n\n");
 
+  const client = getClient();
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 16384,

@@ -77,8 +77,13 @@ export function useAnalysis() {
       if (!analyzeRes.ok) {
         let errorMsg = "Analysis failed";
         try {
-          const data = await analyzeRes.json();
-          errorMsg = data.error || errorMsg;
+          const text = await analyzeRes.text();
+          try {
+            const data = JSON.parse(text);
+            errorMsg = data.error || errorMsg;
+          } catch {
+            errorMsg = text.slice(0, 200) || `Server error (${analyzeRes.status})`;
+          }
         } catch {
           errorMsg = `Server error (${analyzeRes.status})`;
         }

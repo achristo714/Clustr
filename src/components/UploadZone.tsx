@@ -8,28 +8,63 @@ interface UploadZoneProps {
   isProcessing: boolean;
 }
 
+const FILE_ICON_COLORS: Record<string, string> = {
+  "application/pdf": "text-red-400",
+  "image/png": "text-blue-400",
+  "image/jpeg": "text-blue-400",
+  "image/gif": "text-blue-400",
+  "image/webp": "text-blue-400",
+  "application/zip": "text-yellow-400",
+  "application/x-zip-compressed": "text-yellow-400",
+};
+
+function getFileIcon(type: string) {
+  if (type.startsWith("image/")) {
+    return (
+      <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+      </svg>
+    );
+  }
+  if (type.includes("zip")) {
+    return (
+      <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+        <path fillRule="evenodd" d="M8 3.5h1v1H8v-1zm0 2h1v1H8v-1zm0 2h1v1H8v-1zm0 2h1v1H8v-1z" clipRule="evenodd" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M4 18h12a2 2 0 002-2V6l-4-4H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
 export default function UploadZone({
   onAnalyze,
   isProcessing,
 }: UploadZoneProps) {
   const [files, setFiles] = useState<File[]>([]);
 
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      const pdfFiles = acceptedFiles.filter(
-        (f) => f.type === "application/pdf",
-      );
-      setFiles((prev) => {
-        const combined = [...prev, ...pdfFiles];
-        return combined.slice(0, 20);
-      });
-    },
-    [],
-  );
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    setFiles((prev) => {
+      const combined = [...prev, ...acceptedFiles];
+      return combined.slice(0, 20);
+    });
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "application/pdf": [".pdf"] },
+    accept: {
+      "application/pdf": [".pdf"],
+      "image/png": [".png"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/gif": [".gif"],
+      "image/webp": [".webp"],
+      "application/zip": [".zip"],
+      "application/x-zip-compressed": [".zip"],
+    },
     maxFiles: 20,
     disabled: isProcessing,
   });
@@ -70,11 +105,11 @@ export default function UploadZone({
         </div>
         <p className="text-lg text-gray-300 mb-1">
           {isDragActive
-            ? "Drop your PDFs here..."
-            : "Drag & drop PDF notes here"}
+            ? "Drop your files here..."
+            : "Drag & drop your notes here"}
         </p>
         <p className="text-sm text-gray-500">
-          or click to browse (up to 20 files)
+          PDFs, images, or ZIP folders (up to 20 files)
         </p>
       </div>
 
@@ -96,13 +131,9 @@ export default function UploadZone({
                 className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-2.5 group"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <svg
-                    className="w-4 h-4 text-red-400 shrink-0"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M4 18h12a2 2 0 002-2V6l-4-4H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                  <span className={FILE_ICON_COLORS[file.type] || "text-gray-400"}>
+                    {getFileIcon(file.type)}
+                  </span>
                   <span className="text-sm text-gray-300 truncate">
                     {file.name}
                   </span>
@@ -141,7 +172,7 @@ export default function UploadZone({
             disabled={isProcessing || files.length === 0}
             className="w-full mt-4 py-3 px-6 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25"
           >
-            Analyze {files.length} PDF{files.length !== 1 ? "s" : ""}
+            Analyze {files.length} file{files.length !== 1 ? "s" : ""}
           </button>
         </div>
       )}

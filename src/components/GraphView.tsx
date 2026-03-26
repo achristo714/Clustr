@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
 import type { AnalysisResult, Concept } from "@/lib/types";
 
@@ -23,10 +23,19 @@ interface GraphViewProps {
 export default function GraphView({ data, onSelectConcept }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  const onSelectRef = useRef(onSelectConcept);
+  onSelectRef.current = onSelectConcept;
 
-  useEffect(() => {
-    if (!containerRef.current || initialized) return;
+  const initGraph = useCallback(() => {
+    if (!containerRef.current) return;
+
+    // Destroy previous instance
+    if (cyRef.current) {
+      cyRef.current.destroy();
+      cyRef.current = null;
+    }
+
+    const nodeIds = new Set(data.concepts.map((c) => c.id));
 
     const nodes = data.concepts.map((concept) => ({
       data: {
@@ -39,19 +48,22 @@ export default function GraphView({ data, onSelectConcept }: GraphViewProps) {
       },
     }));
 
-    const edges = data.connections.map((conn, i) => ({
-      data: {
-        id: `edge-${i}`,
-        source: conn.source,
-        target: conn.target,
-        strength: conn.strength,
-        reason: conn.reason,
-      },
-    }));
+    // Filter out edges referencing non-existent nodes
+    const edges = data.connections
+      .filter((conn) => nodeIds.has(conn.source) && nodeIds.has(conn.target))
+      .map((conn, i) => ({
+        data: {
+          id: `edge-${i}`,
+          source: conn.source,
+          target: conn.target,
+          strength: conn.strength,
+          reason: conn.reason,
+        },
+      }));
 
     const cy = cytoscape({
       container: containerRef.current,
-      elements: [...nodes, ...edges],
+      elements: { nodes, edges },
       style: [
         {
           selector: "node",
@@ -119,19 +131,26 @@ export default function GraphView({ data, onSelectConcept }: GraphViewProps) {
           } as cytoscape.Css.Edge,
         },
       ],
-      layout: {
-        name: "cose",
-        animate: true,
-        animationDuration: 1500,
-        nodeRepulsion: () => 8000,
-        idealEdgeLength: () => 120,
-        gravity: 0.3,
-        numIter: 500,
-        padding: 50,
-      } as cytoscape.CoseLayoutOptions,
+      layout: { name: "preset" },
       minZoom: 0.3,
       maxZoom: 3,
       wheelSensitivity: 0.3,
+    });
+
+    // Run layout after graph is ready
+    cy.ready(() => {
+      const layout = cy.layout({
+        name: "cose",
+        animate: true,
+        animationDuration: 1500,
+        nodeRepulsion: 8000,
+        idealEdgeLength: 120,
+        gravity: 0.3,
+        numIter: 500,
+        padding: 50,
+        randomize: true,
+      } as cytoscape.CoseLayoutOptions);
+      layout.run();
     });
 
     // Hover interactions
@@ -140,34 +159,39 @@ export default function GraphView({ data, onSelectConcept }: GraphViewProps) {
       const neighborhood = node.closedNeighborhood();
       cy.elements().addClass("faded");
       neighborhood.removeClass("faded").addClass("highlighted");
-      containerRef.current!.style.cursor = "pointer";
+      if (containerRef.current) containerRef.current.style.cursor = "pointer";
     });
 
     cy.on("mouseout", "node", () => {
       cy.elements().removeClass("faded highlighted");
-      containerRef.current!.style.cursor = "default";
+      if (containerRef.current) containerRef.current.style.cursor = "default";
     });
 
     // Click to select
     cy.on("tap", "node", (e: EventObject) => {
       const nodeId = e.target.id();
       const concept = data.concepts.find((c) => c.id === nodeId) || null;
-      onSelectConcept(concept);
+      onSelectRef.current(concept);
     });
 
     cy.on("tap", (e: EventObject) => {
       if (e.target === cy) {
-        onSelectConcept(null);
+        onSelectRef.current(null);
       }
     });
 
     cyRef.current = cy;
-    setInitialized(true);
+  }, [data]);
 
+  useEffect(() => {
+    initGraph();
     return () => {
-      cy.destroy();
+      if (cyRef.current) {
+        cyRef.current.destroy();
+        cyRef.current = null;
+      }
     };
-  }, [data, onSelectConcept, initialized]);
+  }, [initGraph]);
 
   return (
     <div className="relative w-full h-full">

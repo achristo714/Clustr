@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { AnalysisResult, ProcessingStatus } from "@/lib/types";
+import type { AnalysisResult, ProcessingStatus, Document } from "@/lib/types";
 
 export function useAnalysis() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -17,29 +17,72 @@ export function useAnalysis() {
     setResult(null);
 
     try {
-      setStatus({
-        stage: "extracting",
-        message: `Extracting text from ${files.length} PDF${files.length > 1 ? "s" : ""}...`,
-        progress: 20,
-      });
+      // Step 1: Extract text from each file individually
+      const allDocuments: Document[] = [];
+      for (let i = 0; i < files.length; i++) {
+        setStatus({
+          stage: "extracting",
+          message: `Extracting text from file ${i + 1} of ${files.length}...`,
+          progress: Math.round(10 + (i / files.length) * 40),
+        });
 
-      const formData = new FormData();
-      files.forEach((file) => formData.append("files", file));
+        const formData = new FormData();
+        formData.append("file", files[i]);
 
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          if (res.status === 413) {
+            throw new Error(
+              `File "${files[i].name}" is too large (max ~4MB per file).`,
+            );
+          }
+          let msg = `Failed to extract "${files[i].name}"`;
+          try {
+            const data = await res.json();
+            msg = data.error || msg;
+          } catch {
+            // non-JSON response
+          }
+          console.warn(msg);
+          continue; // skip failed files, process the rest
+        }
+
+        const { documents } = await res.json();
+        allDocuments.push(...documents);
+      }
+
+      if (allDocuments.length === 0) {
+        throw new Error(
+          "No text could be extracted from any of the uploaded files.",
+        );
+      }
+
+      // Step 2: Send all extracted text to Claude for analysis
       setStatus({
         stage: "analyzing",
-        message: "Analyzing content with AI...",
-        progress: 50,
+        message: `Analyzing ${allDocuments.length} document${allDocuments.length > 1 ? "s" : ""} with AI...`,
+        progress: 60,
       });
 
-      const response = await fetch("/api/analyze", {
+      const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents: allDocuments }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Analysis failed");
+      if (!analyzeRes.ok) {
+        let errorMsg = "Analysis failed";
+        try {
+          const data = await analyzeRes.json();
+          errorMsg = data.error || errorMsg;
+        } catch {
+          errorMsg = `Server error (${analyzeRes.status})`;
+        }
+        throw new Error(errorMsg);
       }
 
       setStatus({
@@ -48,9 +91,8 @@ export function useAnalysis() {
         progress: 85,
       });
 
-      const data: AnalysisResult = await response.json();
+      const data: AnalysisResult = await analyzeRes.json();
 
-      // Brief delay so user sees the "building" stage
       await new Promise((r) => setTimeout(r, 500));
 
       setResult(data);

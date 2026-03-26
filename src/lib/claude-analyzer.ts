@@ -15,7 +15,7 @@ export async function analyzeDocuments(
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
+    max_tokens: 16384,
     messages: [
       {
         role: "user",
@@ -57,16 +57,26 @@ Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 }
 
 Guidelines:
-- Extract 10-30 key concepts depending on document count and content richness
+- Extract 10-20 key concepts depending on document count and content richness
 - Assign clusters (0-7) to group related concepts by theme
 - Weight concepts 0.0-1.0 based on how prominently they appear across documents
 - Connection strength 0.0-1.0 based on how strongly concepts relate
-- Include 30-80 word frequencies for the word cloud (common words only, no stop words)
+- Include 30-60 word frequencies for the word cloud (common words only, no stop words)
+- Keep descriptions and reasons SHORT (under 15 words each)
+- Keep document summaries to 1 sentence each
 - Each document summary should reference concept IDs from the concepts array
-- Focus on ideas, themes, technologies, methodologies, and key takeaways`,
+- Focus on ideas, themes, technologies, methodologies, and key takeaways
+- IMPORTANT: Your entire response must be valid, complete JSON. Do not truncate.`,
       },
     ],
   });
+
+  // Check if the response was truncated
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(
+      "Analysis response was truncated. Try uploading fewer documents.",
+    );
+  }
 
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";
@@ -77,6 +87,12 @@ Guidelines:
     jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   }
 
-  const result: AnalysisResult = JSON.parse(jsonStr);
-  return result;
+  try {
+    const result: AnalysisResult = JSON.parse(jsonStr);
+    return result;
+  } catch {
+    throw new Error(
+      "Failed to parse AI response. Please try again.",
+    );
+  }
 }

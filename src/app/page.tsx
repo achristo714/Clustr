@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import UploadZone from "@/components/UploadZone";
 import GraphView from "@/components/GraphView";
 import WordCloud from "@/components/WordCloud";
@@ -10,9 +10,21 @@ import { useAnalysis } from "@/hooks/useAnalysis";
 import type { Concept } from "@/lib/types";
 
 export default function Home() {
-  const { result, status, isProcessing, analyze, reset } = useAnalysis();
+  const { result, status, isProcessing, analyze, addMore, reset } =
+    useAnalysis();
   const [selectedConcept, setSelectedConcept] = useState<Concept | null>(null);
   const [activeView, setActiveView] = useState<"graph" | "wordcloud">("graph");
+  const addMoreInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddMoreFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setSelectedConcept(null);
+      addMore(files);
+    }
+    // Reset so the same files can be re-selected
+    e.target.value = "";
+  };
 
   // Upload state
   if (!result && !isProcessing) {
@@ -49,6 +61,16 @@ export default function Home() {
   // Results state
   return (
     <main className="h-screen flex flex-col overflow-hidden">
+      {/* Hidden file input for adding more files */}
+      <input
+        ref={addMoreInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
+        className="hidden"
+        onChange={handleAddMoreFiles}
+      />
+
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-4">
@@ -88,6 +110,12 @@ export default function Home() {
             {result!.connections.length} connections &middot;{" "}
             {result!.documentSummaries.length} documents
           </span>
+          <button
+            onClick={() => addMoreInputRef.current?.click()}
+            className="px-3 py-1.5 text-sm text-purple-300 hover:text-white bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-all"
+          >
+            + Add Files
+          </button>
           <button
             onClick={() => {
               reset();
